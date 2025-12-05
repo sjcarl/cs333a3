@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <title>Sarah Carley - A3</title>
+
+
+  <style>
+    h1 {
+      text-align: center;
+      font-family: "Times New Roman", serif;
+      font-size: 2.5em;
+      color: #336699;
+    }
+
+    .states {
+      fill: #eee;
+      stroke: #999;
+      stroke-width: 1;
+    }
+
+    .symbol {
+      stroke: #000;
+      opacity: 0.7;
+      stroke-opacity: 0.5;
+
+    }
+
+    .emoji {
+      filter: brightness(0);
+      /* make emojis solid black */
+    }
+
+    .row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-start;
+      gap: 20px;
+      margin: 20px;
+    }
+
+    .config-card {
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      border: 1px solid #ccc;
+      overflow: hidden;
+    }
+
+    .config-card-header {
+      flex: 0 0 auto;
+      font-weight: bold;
+      font-size: 14px;
+      padding: 4px;
+      background: #f0f0f0;
+    }
+
+    .config-card-body {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      /* top-align*/
+    }
+
+
+    .config-card-body .hist {
+      flex: 1.5;
+      /* histogram smaller */
+      display: flex;
+      flex-direction: column;
+      justify-content: right;
+      align-items: right;
+    }
+
+    .config-card-body .map {
+      flex: 2.5;
+      margin-top: 20px;
+      display: left;
+      vertical-align: top;
+
+    }
+
+
+    #config-grid {
+      width: 95%;
+      height: 95%;
+      grid-template-columns: auto auto;
+      grid-template-rows: auto auto;
+    }
+
+    #map-container {
+      flex: 0 0 auto;
+    }
+
+    #histogram-container {
+      flex: 1;
+      min-width: 300px;
+    }
+
+    #tooltip {
+      position: absolute;
+      background: white;
+      border: 1px solid #999;
+      padding: 8px;
+      border-radius: 4px;
+      pointer-events: none;
+      font-size: 14px;
+      display: none;
+      z-index: 9999;
+      /*  tooltip is on top */
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>United States Apparel Shopping Trends</h1>
+
+  <div id="tooltip" style="
+  position: absolute;
+  background: white;
+  border: 1px solid #999;
+  padding: 8px;
+  border-radius: 4px;
+  pointer-events: none;
+  font-size: 14px;
+  display: none;">
+  </div>
+
+  <div id="histtooltip" style="
+      position: absolute;
+      background: white;
+      border: 1px solid #999;
+      padding: 8px;
+      border-radius: 4px;
+      pointer-events: none;
+      font-size: 14px;
+      display: none;">
+  </div>
+
+  <div class="controls" style="text-align:center; margin-top:20px;">
+    <button id="reset">Reset</button>
+    <button id="show-item">Show most popular item</button>
+    <button id="show-color">Show most popular color</button>
+    <button id="show-both">Show most popular item and color</button>
+
+  </div>
+
+  <div class="controls" style="text-align:right; margin-top:0px;">
+    <button id="show-histogram" style="display:none;">Show Histogram(s)</button>
+  </div>
+
+  <div class="controls" style="text-align:left; margin-top:0px;">
+
+    <button id="snapshot">Save View</button>
+    <button id="show-configs">Show saved configurations</button>
+
+  </div>
+
+  <div class="filters" style="text-align:center; margin-top:20px;">
+    <label>Gender:
+      <select id="filter-gender">
+        <option value="All">All</option>
+        <option value="Male">Male</option>
+        <option value="Female">Female</option>
+      </select>
+    </label>
+
+    <label>Age Range:
+      <select id="filter-age">
+        <option value="All">All</option>
+        <option value="18-29">18–29</option>
+        <option value="30-44">30–44</option>
+        <option value="45-60">45–60</option>
+        <option value="60+">60+</option>
+      </select>
+    </label>
+
+    <label>Season:
+      <select id="filter-season">
+        <option value="All">All</option>
+        <option value="Spring">Spring</option>
+        <option value="Summer">Summer</option>
+        <option value="Fall">Fall</option>
+        <option value="Winter">Winter</option>
+      </select>
+    </label>
+  </div>
+
+  <div id="histogram-container"
+    style="position:absolute; right:200px; top:150px; width:220px; display:flex; flex-direction:column; gap:20px;">
+  </div>
+
+  <div class="row">
+    <div id="map-container"></div>
+  </div>
+
+  <!-- Popup overlay -->
+  <div id="config-popup" style="
+  display:none;
+  position:fixed;
+  top:0; left:0;
+  width:100%; height:100%;
+  background:rgba(0,0,0,0.7);
+  z-index:10000;
+  justify-content:center;
+  align-items:center;">
+
+  <div id="config-grid" style="
+    background:#fff;
+    width:90%; height:90%;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    grid-template-rows:1fr 1fr;
+    gap:10px;
+    padding:20px;
+    position:relative;">
+
+    <button id="close-popup" style="
+      position:absolute; top:10px; right:10px;">X</button>
+
+    </div>
+  </div>
+
+
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://d3js.org/topojson.v1.min.js"></script>
+
+  <script>
+
+    //account for non-defined colors
+    const customColors = {
+      Charcoal: "#36454F", 
+      Peach: "#FFE5B4"
+    };
+
+    //California -> CA 
+    const nameToAbbr = {
+      "Alabama": "AL",
+      "Alaska": "AK",
+      "Arizona": "AZ",
+      "Arkansas": "AR",
+      "California": "CA",
+      "Colorado": "CO",
+      "Connecticut": "CT",
+      "Delaware": "DE",
+      "Florida": "FL",
+      "Georgia": "GA",
+      "Hawaii": "HI",
+      "Idaho": "ID",
+      "Illinois": "IL",
+      "Indiana": "IN",
+      "Iowa": "IA",
+      "Kansas": "KS",
+      "Kentucky": "KY",
+      "Louisiana": "LA",
+      "Maine": "ME",
+      "Maryland": "MD",
+      "Massachusetts": "MA",
+      "Michigan": "MI",
+      "Minnesota": "MN",
+      "Mississippi": "MS",
+      "Missouri": "MO",
+      "Montana": "MT",
+      "Nebraska": "NE",
+      "Nevada": "NV",
+      "New Hampshire": "NH",
+      "New Jersey": "NJ",
+      "New Mexico": "NM",
+      "New York": "NY",
+      "North Carolina": "NC",
+      "North Dakota": "ND",
+      "Ohio": "OH",
+      "Oklahoma": "OK",
+      "Oregon": "OR",
+      "Pennsylvania": "PA",
+      "Rhode Island": "RI",
+      "South Carolina": "SC",
+      "South Dakota": "SD",
+      "Tennessee": "TN",
+      "Texas": "TX",
+      "Utah": "UT",
+      "Vermont": "VT",
+      "Virginia": "VA",
+      "Washington": "WA",
+      "West Virginia": "WV",
+      "Wisconsin": "WI",
+      "Wyoming": "WY"
+    };
+    //CA -> California
+    const abbrToName = Object.fromEntries(
+      Object.entries(nameToAbbr).map(([full, abbr]) => [abbr, full]))
+    //pick emojis for items
+    const itemToIcon = {
+      "Blouse": "👚",
+      "Sweater": "🥼", //need new icon
+      "Jeans": "👖",
+      "Sandals": "🩴",
+      "Sneakers": "👟",
+      "Shirt": "👕",
+      "Shorts": "🩳",
+      "Coat": "🧥",
+      "Handbag": "👜",
+      "Shoes": "👞",
+      "Dress": "👗",
+      "Skirt": "☗",
+      "Sunglasses": "🕶️",
+      "Pants": "👖",
+      "Jacket": "🧥",
+      "Hoodie": "🥼",
+      "Jewelry": "💍",
+      "T-shirt": "👕",
+      "Scarf": "🧣",
+      "Hat": "🎩",
+      "Socks": "🧦",
+      "Backpack": "🎒",
+      "Belt": "―", //need new icon
+      "Boots": "🥾",
+      "Gloves": "🧤"
+    };
+
+    const iconToItem = {
+      "👚": "Blouse",
+      "🥼": "Sweater",
+      "👖": "Jeans",
+      "🩴": "Sandals",
+      "👟": "Sneakers",
+      "👕": "Shirt",
+      "🩳": "Shorts",
+      "🧥": "Coat/Jacket",
+      "👜": "Handbag",
+      "👞": "Shoes",
+      "👗": "Dress",
+      "☗": "Skirt",
+      "🕶️": "Sunglasses",
+      "💍": "Jewelry",
+      "🧣": "Scarf",
+      "🎩": "Hat",
+      "🧦": "Socks",
+      "🎒": "Backpack",
+      "―": "Belt",
+      "🥾": "Boots",
+      "🧤": "Gloves"
+    };
+
+    //setup:
+    let width = window.innerWidth * 0.95;  // 95% of screen width
+    let height = width * 0.4;//aspect ratio
+    let filtered = []
+    let histogramVisible = false;
+
+    let projection = d3.geoAlbersUsa()
+      .translate([width * 0.35, height / 2]) // shift left
+      .scale(width * 0.8);
+
+    let path = d3.geoPath()
+      .projection(projection);
+
+    //Append SVG into the map container
+    let svg = d3.select("#map-container").append("svg")
+      .attr("width", width)
+      .attr("height", height);
+
+    const tooltip = d3.select("#tooltip");
+
+    //draw layers so state is always on bottom, then color, then emoji
+    const stateLayer = svg.append("g").attr("class", "state-layer");
+    const colorLayer = svg.append("g").attr("class", "color-layer");
+    colorLayer.attr("pointer-events", "none"); //make sure colors don't interfere with click on state
+    const emojiLayer = svg.append("g").attr("class", "emoji-layer");
+    emojiLayer.attr("pointer-events", "none");//make sure emojis don't interfere with click on state
+    //emojiLayer.attr("opacity", 0.75);//make sure emojis don't interfere with click on state
+
+    //initialize
+    let allPurchases = []; //original dataset, no filter
+    let centroid = null;
+    let stateFeatures = null;
+
+    let currentMode = "none"; //"color", "item", "both"
+
+
+    //rollups that will be recomputed on filter changes
+    let avgPurchaseByState = new Map();
+    let mostPopularColorByState = new Map();
+    let mostPopularItemByState = new Map();
+
+
+    //filter helper functions:
+
+    function getFilters() {
+      return {
+        gender: document.getElementById("filter-gender").value,
+        ageRange: document.getElementById("filter-age").value,
+        season: document.getElementById("filter-season").value
+      };
+    }
+
+    function matchesFilters(record, filters) {
+      //Gender
+      if (filters.gender && filters.gender !== "All") {
+        let g = (record.Gender || record.gender || record.Sex || "").toString().trim();
+        if (!g) return false;
+        if (g.toLowerCase() !== filters.gender.toLowerCase()) return false;
+      }
+
+      // Season
+      if (filters.season && filters.season !== "All") {
+        let s = (record.Season || record.season || record["Purchase Season"] || "").toString().trim();
+        if (!s) return false;
+        if (s.toLowerCase() !== filters.season.toLowerCase()) return false;
+      }
+
+      //Age  
+      if (filters.ageRange && filters.ageRange !== "All") {
+        let age = parseInt(record.Age || record.age || record["Customer Age"], 10);
+
+        //skip if parsing failed... just in case
+        if (isNaN(age)) return false;
+
+        let r = filters.ageRange;
+        if (r === "18-29" && !(age >= 18 && age <= 29)) return false;
+        if (r === "30-44" && !(age >= 30 && age <= 44)) return false;
+        if (r === "45-60" && !(age >= 45 && age <= 60)) return false;
+        if (r === "60+" && !(age >= 60)) return false;
+      }
+      return true;
+    }
+
+
+    //histogram
+    function getHistogramData(filtered) {
+      let colorCounts = d3.rollup(filtered, v => v.length, d => d.color);
+      let itemCounts = d3.rollup(filtered, v => v.length, d => d.item);
+
+      return {
+        colors: Array.from(colorCounts, ([color, count]) => ({ color, count })),
+        items: Array.from(itemCounts, ([item, count]) => ({ item, count }))
+      };
+    }
+
+
+    function cloneSvg(selector, s) {
+      const svg = document.querySelector(selector);
+      if (!svg) return null;
+      const clone = svg.cloneNode(true);
+
+      const origWidth = svg.getAttribute("width");
+      const origHeight = svg.getAttribute("height");
+
+      clone.removeAttribute("width");
+      clone.removeAttribute("height");
+      clone.setAttribute("viewBox", `0 0 ${origWidth} ${origHeight}`);
+      clone.style.width = s;
+      clone.style.height = s;
+
+      return clone;
+    }
+
+
+    let savedConfigs = [];
+
+    function getFilterSummary() {
+      const f = getFilters();
+      return `Gender: ${f.gender}, Age: ${f.ageRange}, Season: ${f.season}`;
+    }
+
+    function saveView() {
+      if (savedConfigs.length >= 4) {
+        alert("Maximum of 4 configurations saved. Please view your saved configurations and make space for additional ones as needed.");
+        return;
+      }
+
+      const mapClone = cloneSvg("#map-container svg", "160%");
+      const histClones = [];
+      if (histogramVisible) {
+        const itemHist = document.querySelector("#histogram-container svg.item");
+        const colorHist = document.querySelector("#histogram-container svg.color");
+
+        if (itemHist && (itemHist.style.display === "block" || itemHist.style.display === "")) {
+          const itemClone = cloneSvg("#histogram-container svg.item");
+          if (itemClone) histClones.push(itemClone);
+        }
+        if (colorHist && (colorHist.style.display === "block" || colorHist.style.display === "")) {
+          const colorClone = cloneSvg("#histogram-container svg.color");
+          if (colorClone) histClones.push(colorClone);
+        }
+      }
+
+      savedConfigs.push({
+        map: mapClone,
+        hists: histClones,
+        filters: getFilterSummary()
+      });
+    }
+
+
+    // recompute visual elements
+    function updateVisuals(filteredPurchases) {
+
+      //Recompute avgPurchase
+      avgPurchaseByState = d3.rollup(
+        filteredPurchases,
+        v => d3.mean(v, d => +d["Purchase Amount (USD)"] || +d["Purchase Amount"] || +d.amount || 0),
+        d => nameToAbbr[d.Location] || nameToAbbr[d.state] || d.State || null
+      );
+
+      //most popular color by state
+      mostPopularColorByState = d3.rollup(
+        filteredPurchases,
+        v => {
+          let counts = d3.rollup(v, v2 => v2.length, d => d["Color"] || d.color || "");
+          if (counts.size === 0) return null;
+          return Array.from(counts.entries()).reduce((a, b) => a[1] > b[1] ? a : b)[0];
+        },
+        d => nameToAbbr[d.Location] || nameToAbbr[d.state] || d.State || null
+      );
+
+      //most popular item by state
+      mostPopularItemByState = d3.rollup(
+        filteredPurchases,
+        v => {
+          let counts = d3.rollup(v, v2 => v2.length, d => d["Item Purchased"] || d.item || d.Item || "");
+          if (counts.size === 0) return null;
+          return Array.from(counts.entries()).reduce((a, b) => a[1] > b[1] ? a : b)[0];
+        },
+        d => nameToAbbr[d.Location] || nameToAbbr[d.state] || d.State || null
+      );
+
+      // get colors for states
+      let values = (stateFeatures.features.map(f => {
+        let abbr = f.properties.STATE_ABBR === "DC" ? "MD" : f.properties.STATE_ABBR;
+        return + (avgPurchaseByState.get(abbr) || 0);
+      })).filter(v => !isNaN(v));
+
+      let minVal = values.length ? d3.min(values) : 0;
+      let maxVal = values.length ? d3.max(values) : 1;
+
+      let colorScale = d3.scaleSequential()
+        .domain([0, 100]) //decided to fix this to normlize across filters
+        .interpolator(d3.interpolateRgb("white", "#696969")); // cheap → expensive (black is too dark I think)
+
+
+
+      ///legend 
+      const legendGroup = svg.selectAll(".legend-group")
+        .data([null])
+        .join("g")
+        .attr("class", "legend-group")
+        .attr("transform", "translate(5,300)");
+
+
+      //clear previous
+      legendGroup.selectAll("*").remove();
+
+      let legendWidth = 20;
+      let legendHeight = 20;
+      let legendPadding = 5;
+
+      //min, median, max from the filtered state values
+      let leg_val = stateFeatures.features.map(f => {
+        let abbr = f.properties.STATE_ABBR === "DC" ? "MD" : f.properties.STATE_ABBR;
+        return avgPurchaseByState.get(abbr) || 0;
+      }).filter(v => !isNaN(v));
+
+      if (leg_val.length === 0) leg_val.push(0);
+
+      let min_leg_Val = d3.min(leg_val);
+      let medianVal = d3.median(leg_val);
+      let max_leg_Val = d3.max(leg_val);
+
+      let legendValues = [minVal, medianVal, maxVal];
+      let legendLabels = ["Min", "Median", "Max"];
+
+      // boxes
+      legendGroup.selectAll(".legend-box")
+        .data(legendValues)
+        .enter()
+        .append("rect")
+        .attr("x", 0)
+        .attr("y", (d, i) => i * (legendHeight + legendPadding))
+        .attr("width", legendWidth)
+        .attr("height", legendHeight)
+        .attr("fill", d => colorScale(d))
+        .attr("stroke", "#000");
+
+      ///labels
+      legendGroup.selectAll(".legend-label")
+        .data(legendValues)
+        .enter()
+        .append("text")
+        .attr("x", legendWidth + 5)
+        .attr("y", (d, i) => i * (legendHeight + legendPadding) + legendHeight / 1.5)
+        .text((d, i) => `${legendLabels[i]}: $${d3.format(".0f")(d)}`)
+        .at
+
+      //draw the map!
+
+      let states = stateLayer.selectAll("path")
+        .data(stateFeatures.features, d => d.properties.STATE_ABBR);
+
+
+      states.enter()
+        .append("path")
+        .attr("d", path)
+        .attr("fill", "#f0f0f0")
+        .attr("stroke", "#000")
+        .merge(states)
+        .on("click", function (event, d) {
+          event.stopPropagation();
+
+          let abbr = d.properties.STATE_ABBR;
+          if (abbr === "DC") abbr = "MD";
+          let stateName = abbrToName[abbr] || abbr;
+
+          let avg = avgPurchaseByState.get(abbr) || 0;
+          let item = mostPopularItemByState.get(abbr);
+          let color = mostPopularColorByState.get(abbr);
+          //this tooltip better show up omg
+          let html = `
+      <strong>${stateName}</strong><br/>
+            Avg Purchase Price: $${d3.format(".0f")(avg)}<br/>
+            Most Popular Item: ${item || "N/A"}<br/>
+            Most Popular Color: ${color || "N/A"}
+          `;
+
+          d3.select("#tooltip")
+            .style("left", (event.pageX + 10) + "px")
+            .style("top", (event.pageY + 10) + "px")
+            .style("display", "block")
+            .html(html);
+        })
+        .transition()
+        .duration(800)
+        .attr("fill", d => {
+          let abbr = d.properties.STATE_ABBR;
+          if (abbr === "DC") abbr = "MD"; //shopping doesn't have DC let's just call it MD
+          let avg = avgPurchaseByState.get(abbr);
+          if (avg == null || isNaN(avg)) return "#f0f0f0";
+          return colorScale(avg);
+        });
+      states.exit().remove();
+
+      //add colors
+      colorLayer.selectAll(".symbol")
+        .data(centroid.features)
+        .join("circle")
+        .attr("class", "symbol")
+        .attr("cx", d => {
+          const coords = projection(d.geometry.coordinates);
+          return coords ? coords[0] : -100;
+        })
+        .attr("cy", d => {
+          const coords = projection(d.geometry.coordinates);
+          return coords ? coords[1] : -100;
+        })
+        .attr("r", 15)
+        .attr("stroke", "#000")
+        .attr("stroke-width", 0.5)
+        .style("display", function () { return this.style.display || 'none'; })
+        // transition fill color
+        .transition()
+        .duration(800)
+        .attr("fill", d => {
+          let abbr = nameToAbbr[d.properties.name];
+          if (abbr === "DC") abbr = "MD";
+          const colorName = mostPopularColorByState.get(abbr);
+          return customColors[colorName] || colorName || "rgba(128,128,128,0)";
+        });
+
+      //make emojis
+      emojiLayer.selectAll(".emoji")
+        .data(centroid.features)
+        .join("text")
+        .attr("class", "emoji")
+        .attr("x", d => {
+          const coords = projection(d.geometry.coordinates);
+          return coords ? coords[0] : -100;
+        })
+        .attr("y", d => {
+          const coords = projection(d.geometry.coordinates);
+          return coords ? coords[1] + 2 : -100;
+        })
+        .attr("text-anchor", "middle")
+        .attr("alignment-baseline", "middle")
+        .attr("font-size", "20px")
+        .text(d => {
+          let abbr = nameToAbbr[d.properties.name];
+          if (abbr === "DC") abbr = "MD";
+          let item = mostPopularItemByState.get(abbr);
+          return itemToIcon[item] || "";
+        })
+        .style("display", function () { return this.style.display || 'none'; });
+    }
+
+    //helper funcs for buttons:
+    function drawColor() {
+      currentMode = "color";
+      colorLayer.selectAll(".symbol").style("display", "inline");
+      emojiLayer.selectAll(".emoji").style("display", "none");
+      document.getElementById("show-histogram").style.display = "inline"; // show button
+      if (histogramVisible) { showRelevantHistogram(); }
+    }
+
+    function drawEmoji() {
+      currentMode = "item";
+      emojiLayer.selectAll(".emoji").style("display", "inline");
+      colorLayer.selectAll(".symbol").style("display", "none");
+      document.getElementById("show-histogram").style.display = "inline"; // show button
+
+
+      if (histogramVisible) { showRelevantHistogram(); }
+    }
+
+    function drawBoth() {
+      currentMode = "both";
+      emojiLayer.selectAll(".emoji").style("display", "inline");
+      colorLayer.selectAll(".symbol").style("display", "inline");
+      document.getElementById("show-histogram").style.display = "inline"; // show button
+      if (histogramVisible) { showRelevantHistogram(); }
+    }
+
+
+    function drawHistogram(filteredPurchases) {
+      // item histogram
+      let itemCounts = d3.rollup(
+        filteredPurchases,
+        v => v.length,
+        d => d["Item Purchased"] || d.item || d.Item || ""
+      );
+
+      let totalItems = d3.sum(Array.from(itemCounts.values()));
+
+      //group by emoji so repeats combine (coat/jacket)
+      let emojiCounts = {};
+      itemCounts.forEach((count, item) => {
+        let emoji = itemToIcon[item] || "❓";
+        if (!emojiCounts[emoji]) emojiCounts[emoji] = 0;
+        emojiCounts[emoji] += count;
+      });
+
+      let itemData = Object.entries(emojiCounts).map(([emoji, count]) => ({
+        emoji,
+        count,
+        percent: (count / totalItems) * 100
+      }));
+
+      //keep emojis in consistent order 
+      itemData.sort((a, b) => a.emoji.localeCompare(b.emoji));
+
+      let itemWidth = 400
+      let itemHeight = 250
+      let margin = { top: 40, right: 20, bottom: 60, left: 60 }
+
+      let itemSvg = d3.select("#histogram-container").select("svg.item");
+
+      if (itemSvg.empty()) {
+        itemSvg = d3.select("#histogram-container")
+          .append("svg")
+          .attr("class", "item")
+          .attr("width", itemWidth)
+          .attr("height", itemHeight);
+
+        itemSvg.append("g").attr("class", "x-axis")
+          .attr("transform", `translate(0,${itemHeight - margin.bottom})`);
+
+        itemSvg.append("g").attr("class", "y-axis")
+          .attr("transform", `translate(${margin.left},0)`);
+
+        itemSvg.append("emoji")
+          .attr("class", "title")
+          .attr("x", itemWidth / 2)
+          .attr("y", 20)
+          .attr("text-anchor", "middle")
+          .style("font-size", "16px")
+          .text("Items");
+      }
+
+      let xItem = d3.scaleBand()
+        .domain(itemData.map(d => d.emoji))
+        .range([margin.left, itemWidth - margin.right])
+        .padding(0.3);
+
+      let yItem = d3.scaleLinear()
+        .domain([0, d3.max(itemData, d => d.percent)])
+        .nice()
+        .range([itemHeight - margin.bottom, margin.top]);
+
+      let bars = itemSvg.selectAll("rect")
+        .data(itemData, d => d.emoji);
+
+      bars.enter().append("rect")
+        .attr("x", d => xItem(d.emoji))
+        .attr("y", yItem(0))
+        .attr("width", xItem.bandwidth())
+        .attr("height", 0)
+        .attr("fill", "#336699")
+        .attr("stroke", "black")
+        .attr("stroke-width", 1)
+
+        .transition().duration(750)
+        .attr("y", d => yItem(d.percent))
+        .attr("height", d => yItem(0) - yItem(d.percent));
+
+      bars.transition().duration(750)
+        .attr("x", d => xItem(d.emoji))
+        .attr("y", d => yItem(d.percent))
+        .attr("height", d => yItem(0) - yItem(d.percent))
+        .attr("width", xItem.bandwidth());
+
+      bars.exit().transition().duration(750)
+        .attr("y", yItem(0))
+        .attr("height", 0)
+        .remove();
+
+      itemSvg.select(".x-axis")
+        .call(d3.axisBottom(xItem))
+        .selectAll("text")
+        .style("filter", "brightness(0)");
+
+      itemSvg.select(".y-axis").call(d3.axisLeft(yItem).ticks(6).tickFormat(d => d + "%"));
+      bars.enter().append("rect")
+        .attr("x", d => xItem(d.emoji))
+        .attr("y", yItem(0))
+        .attr("width", xItem.bandwidth())
+        .attr("height", 0)
+        .attr("fill", "#336699")
+        .attr("stroke", "black")
+        .attr("stroke-width", 1)
+        .merge(bars)
+        .on("mouseover", (event, d) => {
+          tooltip.style("display", "block")
+            .html(`<strong>Item:</strong> ${iconToItem[d.emoji] || d.emoji}<br/>
+             <strong>Percent:</strong> ${d.percent.toFixed(1)}%`);
+        })
+        .on("mousemove", (event) => {
+          tooltip.style("left", (event.pageX + 10) + "px")
+            .style("top", (event.pageY + 10) + "px");
+        })
+        .on("mouseout", () => {
+          tooltip.style("display", "none");
+        })
+        .transition().duration(750)
+        .attr("y", d => yItem(d.percent))
+        .attr("height", d => yItem(0) - yItem(d.percent));
+
+
+      // Color historgam 
+      let colorCounts = d3.rollup(
+        filteredPurchases,
+        v => v.length,
+        d => d["Color"] || d.color || ""
+      );
+
+      let totalColors = d3.sum(Array.from(colorCounts.values()));
+      let colorData = Array.from(colorCounts, ([color, count]) => ({
+        color,
+        count,
+        percent: (count / totalColors) * 100,
+        hex: (customColors[color] ? customColors[color] : (d3.color(color) ? d3.color(color).formatHex() : "#ccc"))
+      }));
+
+      const fixedColorOrder = ["Red", "Maroon", "Pink", "Orange", "Peach", "Yellow", "Gold", "Green", "Olive", "Cyan", "Turquoise", "Teal", "Blue", "Indigo", "Violet", "Purple", "Lavender", "Magenta", "Brown", "Beige", "Gray", "Charcoal", "Silver", "Black", "White"];
+      colorData.sort((a, b) => {
+        let ai = fixedColorOrder.indexOf(a.color);
+        let bi = fixedColorOrder.indexOf(b.color);
+        if (ai === -1) ai = fixedColorOrder.length + a.color.localeCompare(b.color);
+        if (bi === -1) bi = fixedColorOrder.length + b.color.localeCompare(a.color);
+        return ai - bi;
+      });
+
+      let colorWidth = 500
+      let colorHeight = 300;
+
+      let colorSvg = d3.select("#histogram-container").select("svg.color");
+      if (colorSvg.empty()) {
+        colorSvg = d3.select("#histogram-container")
+          .append("svg")
+          .attr("class", "color")
+          .attr("width", colorWidth)
+          .attr("height", colorHeight);
+
+        colorSvg.append("g").attr("class", "x-axis")
+          .attr("transform", `translate(0,${colorHeight - margin.bottom})`);
+
+        colorSvg.append("g").attr("class", "y-axis")
+          .attr("transform", `translate(${margin.left},0)`);
+
+        colorSvg.append("text")
+          .attr("class", "title")
+          .attr("x", colorWidth / 2)
+          .attr("y", 25)
+          .attr("text-anchor", "middle")
+          .style("font-size", "16px")
+          .text("Colors");
+      }
+
+      let xColor = d3.scaleBand()
+        .domain(colorData.map(d => d.color))
+        .range([margin.left, colorWidth - margin.right])
+        .padding(0.4);
+
+      let yColor = d3.scaleLinear()
+        .domain([0, d3.max(colorData, d => d.percent)])
+        .nice()
+        .range([colorHeight - margin.bottom, margin.top]);
+
+      let colorBars = colorSvg.selectAll("rect")
+        .data(colorData, d => d.color);
+
+      colorBars.enter().append("rect")
+        .attr("x", d => xColor(d.color))
+        .attr("y", yColor(0))
+        .attr("width", xColor.bandwidth())
+        .attr("height", 0)
+        .attr("fill", d => d.hex)
+        .attr("stroke", "black")
+        .attr("stroke-width", 1)
+        .transition().duration(750)
+        .attr("y", d => yColor(d.percent))
+        .attr("height", d => yColor(0) - yColor(d.percent));
+
+      colorBars.transition().duration(750)
+        .attr("x", d => xColor(d.color))
+        .attr("y", d => yColor(d.percent))
+        .attr("height", d => yColor(0) - yColor(d.percent))
+        .attr("width", xColor.bandwidth())
+        .attr("fill", d => d.hex);
+
+      colorBars.exit().transition().duration(750)
+        .attr("y", yColor(0))
+        .attr("height", 0)
+        .remove();
+
+      colorSvg.select(".x-axis")
+        .call(d3.axisBottom(xColor))
+        .selectAll("text")
+        .attr("transform", "rotate(-65)")
+        .style("text-anchor", "end")
+        .attr("dx", "-0.8em")
+        .attr("dy", "0.1em");
+
+
+
+      colorSvg.select(".y-axis").call(d3.axisLeft(yColor).ticks(6).tickFormat(d => d + "%"));
+      colorBars.enter().append("rect")
+        .attr("x", d => xColor(d.color))
+        .attr("y", yColor(0))
+        .attr("width", xColor.bandwidth())
+        .attr("height", 0)
+        .attr("fill", d => d.hex)
+        .attr("stroke", "black")
+        .attr("stroke-width", 1)
+        .merge(colorBars)
+        .on("mouseover", (event, d) => {
+          tooltip.style("display", "block")
+            .html(`<strong>Color:</strong> ${d.color}<br/><strong>Percent:</strong> ${d.percent.toFixed(1)}%`);
+        })
+        .on("mousemove", (event) => {
+          tooltip.style("left", (event.pageX + 10) + "px")
+            .style("top", (event.pageY + 10) + "px");
+        })
+        .on("mouseout", () => {
+          tooltip.style("display", "none");
+        })
+        .transition().duration(750)
+        .attr("y", d => yColor(d.percent))
+        .attr("height", d => yColor(0) - yColor(d.percent));
+
+      //showRelevantHistogram();
+    }
+
+    function showRelevantHistogram() {
+      // hide both first
+      d3.select("#histogram-container svg.item").style("display", "none");
+      d3.select("#histogram-container svg.color").style("display", "none");
+
+      if (currentMode === "item") {
+        d3.select("#histogram-container svg.item").style("display", "block");
+      } else if (currentMode === "color") {
+        d3.select("#histogram-container svg.color").style("display", "block");
+      } else if (currentMode === "both") {
+        d3.select("#histogram-container svg.item").style("display", "block");
+        d3.select("#histogram-container svg.color").style("display", "block");
+      }
+    }
+
+
+    function resetCentroids() {
+      emojiLayer.selectAll(".emoji").style("display", "none");
+      colorLayer.selectAll(".symbol").style("display", "none");
+      d3.select("#tooltip").style("display", "none");
+      // also reset filters in UI
+      document.getElementById("filter-gender").value = "All";
+      document.getElementById("filter-age").value = "All";
+      document.getElementById("filter-season").value = "All";
+      applyFilters();
+
+      // hide histogram elements
+      const btn = document.getElementById("show-histogram");
+      btn.style.display = "none";
+      btn.textContent = "Show Histogram(s)";
+      histogramVisible = false;
+
+      d3.select("#histogram-container svg.item").style("display", "none");
+      d3.select("#histogram-container svg.color").style("display", "none");
+    }
+
+
+    //actually do filtering
+    function applyFilters() {
+      let filters = getFilters();
+      filtered = allPurchases.filter(d => matchesFilters(d, filters));
+      updateVisuals(filtered);
+      if (histogramVisible) {
+        drawHistogram(filtered); //redraw only if toggle is ON
+        showRelevantHistogram();
+      }
+    }
+
+    //tooltip hide on new click
+    svg.on("click", function (event) {
+      if (!event.target.closest("path")) {
+        d3.select("#tooltip").style("display", "none");
+      }
+    });
+
+    // call main func
+    ready();
+
+    // main:
+    async function ready() {
+
+      //load
+      states = await d3.json("states.json");
+      centroid = await d3.json("us-state-centroids.json");
+      //console.log("Loaded states:", states);
+      allPurchases = await d3.json("data.json");
+
+
+      stateFeatures = topojson.feature(states, states.objects.usStates);
+
+
+      //do the updates
+      updateVisuals(allPurchases);
+
+      //attach UI events
+      document.getElementById("show-color").addEventListener("click", drawColor);
+      document.getElementById("show-item").addEventListener("click", drawEmoji);
+      document.getElementById("show-both").addEventListener("click", drawBoth);
+      document.getElementById("reset").addEventListener("click", resetCentroids);
+
+      //attach filter change events
+      document.getElementById("filter-gender").addEventListener("change", applyFilters);
+      document.getElementById("filter-age").addEventListener("change", applyFilters);
+      document.getElementById("filter-season").addEventListener("change", applyFilters);
+
+
+      document.getElementById("show-histogram").addEventListener("click", () => {
+        const btn = document.getElementById("show-histogram");
+
+        if (histogramVisible) {
+          //currently visible, hide them
+          d3.select("#histogram-container svg.item").style("display", "none");
+          d3.select("#histogram-container svg.color").style("display", "none");
+          btn.textContent = "Show Histogram(s)";
+          histogramVisible = false;
+        } else {
+          // currently hidden, show 
+          histogramVisible = true;
+          btn.textContent = "Hide Histogram(s)";
+          drawHistogram(filtered.length ? filtered : allPurchases);   // build/update bars
+          showRelevantHistogram();
+
+        }
+      });
+      // by default hide the centroid overlays until user requests them
+      colorLayer.selectAll(".symbol").style("display", "none");
+      emojiLayer.selectAll(".emoji").style("display", "none");
+    };
+    function showConfigs() {
+      const grid = document.getElementById("config-grid");
+      // clear old cards
+      grid.querySelectorAll(".config-card").forEach(el => el.remove());
+
+      savedConfigs.forEach((conf, i) => {
+        const card = document.createElement("div");
+        card.className = "config-card";
+
+        //header with filter summary
+        const header = document.createElement("div");
+        header.className = "config-card-header";
+        header.textContent = conf.filters;
+
+        // body with map + histograms
+        const body = document.createElement("div");
+        body.className = "config-card-body";
+
+        const left = document.createElement("div");
+        left.className = "map";
+        if (conf.map) left.appendChild(conf.map);
+
+        const right = document.createElement("div");
+        right.className = "hist";
+        if (conf.hists && conf.hists.length) {
+          conf.hists.forEach(h => {
+            right.appendChild(h);
+          });
+        }
+
+        body.appendChild(left);
+        body.appendChild(right);
+
+        //remove button
+        const removeBtn = document.createElement("button");
+        removeBtn.textContent = "X";
+        removeBtn.style.position = "absolute";
+        removeBtn.style.top = "5px";
+        removeBtn.style.right = "5px";
+        removeBtn.onclick = () => {
+          savedConfigs.splice(i, 1);
+          showConfigs();
+        };
+
+        card.appendChild(header);
+        card.appendChild(body);
+        card.appendChild(removeBtn);
+
+        grid.appendChild(card);
+      });
+
+      document.getElementById("config-popup").style.display = "flex";
+    }
+
+    // event listeners
+    document.getElementById("show-configs").addEventListener("click", showConfigs);
+    document.getElementById("close-popup").addEventListener("click", () => {
+      document.getElementById("config-popup").style.display = "none";
+    });
+
+    document.getElementById("snapshot").addEventListener("click", saveView);
+
+
+  </script>
+</body>
+
+</html>
